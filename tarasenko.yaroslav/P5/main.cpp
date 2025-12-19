@@ -15,8 +15,12 @@ namespace tarasenko
 
   point_t left_bot_rect(rectangle_t);
   point_t right_top_rect(rectangle_t);
-  void expand_total_rect(point_t &, point_t &, rectangle_t);
+  rectangle_t make_rect(point_t, point_t);
+  void expand_rect(point_t &, point_t &, rectangle_t);
   void print_rect(rectangle_t);
+
+  point_t center_of_polygon(point_t *, size_t);
+  double signed_area_of_polygon(point_t *, size_t);
 
   class Shape
   {
@@ -58,17 +62,37 @@ namespace tarasenko
       double size;
       point_t center;
   };
+
+  class Polygon: public Shape
+  {
+    public:
+      ~Polygon() override;
+      Polygon(point_t * points, size_t len);
+      double getArea() const override;
+      rectangle_t getFrameRect() const override;
+      void move(point_t dest) override;
+      void move(double dx, double dy) override;
+      void scale(double coeff) override;
+    private:
+      size_t length;
+      point_t * vertices;
+      point_t center;
+  };
 }
 
 int main()
 {
   using namespace tarasenko;
-  size_t n = 4;
+  size_t n = 6;
   Shape** figures = new Shape*[n];
   figures[0] = new Rectangle({6, 7, {11, 2}});
   figures[1] = new Rectangle({1, 2}, {4, 7});
   figures[2] = new Square({5, 2, {0, 0}});
   figures[3] = new Square({2, -1}, 10);
+  point_t verts1[4] = {{0, 0}, {0, 5}, {7, 5}, {7, 0}};
+  figures[4] = new Polygon(verts1, 4);
+  point_t verts2[7] = {{-2, 2}, {-1, 5}, {2, 8}, {5, 7}, {6, 4}, {4, 1}, {0, 0}};
+  figures[5] = new Polygon(verts2, 7);
   double total_area = 0;
   for (size_t i = 0; i < n; ++i)
   {
@@ -84,10 +108,9 @@ int main()
     rectangle_t current = figures[i]->getFrameRect();
     std::cout << "frame rectangle " << i << ":\n";
     print_rect(current);
-    expand_total_rect(left_bot, right_top, current);
+    expand_rect(left_bot, right_top, current);
   }
-  point_t total_center = {(right_top.x + left_bot.x) / 2, (right_top.y + left_bot.y) / 2};
-  rectangle_t total_rect = {right_top.x - left_bot.x, right_top.y - left_bot.y, total_center};
+  rectangle_t total_rect = make_rect(left_bot, right_top);
   std::cout << "total frame rectangle:\n";
   print_rect(total_rect);
 }
@@ -141,7 +164,7 @@ tarasenko::point_t tarasenko::right_top_rect(rectangle_t rect)
   return {rect.pos.x + (rect.width / 2), rect.pos.y + (rect.height / 2)};
 }
 
-void tarasenko::expand_total_rect(point_t & left_bot, point_t & right_top, rectangle_t current)
+void tarasenko::expand_rect(point_t & left_bot, point_t & right_top, rectangle_t current)
 {
   left_bot.x = left_bot_rect(current).x < left_bot.x ? left_bot_rect(current).x : left_bot.x;
   left_bot.y = left_bot_rect(current).y < left_bot.y ? left_bot_rect(current).y : left_bot.y;
@@ -189,4 +212,110 @@ void tarasenko::Square::move(double dx, double dy)
 void tarasenko::Square::scale(double coeff)
 {
   size *= coeff;
+}
+
+tarasenko::Polygon::~Polygon()
+{
+  delete[] vertices;
+}
+
+tarasenko::Polygon::Polygon(point_t * points, size_t len):
+  length(len)
+{
+  if (len < 3)
+  {
+    throw std::runtime_error("invalid poligon");
+  }
+  vertices = new point_t[len];
+  for (size_t i = 0; i < len; ++i)
+  {
+    vertices[i] = points[i];
+  }
+  center = center_of_polygon(vertices, len);
+}
+
+double tarasenko::Polygon::getArea() const
+{
+  double area = signed_area_of_polygon(vertices, length);
+  return area > 0 ? area : -area;
+}
+
+tarasenko::rectangle_t tarasenko::Polygon::getFrameRect() const
+{
+  double max_x = vertices[0].x;
+  double min_x = vertices[0].x;
+  double max_y = vertices[0].y;
+  double min_y = vertices[0].y;
+  for (size_t i = 1; i < length; ++i)
+  {
+    max_x = vertices[i].x > max_x ? vertices[i].x : max_x;
+    min_x = vertices[i].x < min_x ? vertices[i].x : min_x;
+    max_y = vertices[i].y > max_y ? vertices[i].y : max_y;
+    min_y = vertices[i].y < min_y ? vertices[i].y : min_y;
+  }
+  return make_rect({min_x, min_y}, {max_x, max_y});
+}
+
+void tarasenko::Polygon::move(point_t dest)
+{
+  double dx = dest.x - center.x;
+  double dy = dest.y - center.y;
+  move(dx, dy);
+}
+
+void tarasenko::Polygon::move(double dx, double dy)
+{
+  center.x += dx;
+  center.y += dy;
+  for (size_t i = 0; i < length; ++i)
+  {
+    vertices[i].x += dx;
+    vertices[i].y += dy;
+  }
+}
+
+void tarasenko::Polygon::scale(double coeff)
+{
+  for (size_t i = 0; i < length; ++i)
+  {
+    vertices[i].x = center.x - coeff * (center.x - vertices[i].x);
+    vertices[i].y = center.y - coeff * (center.y - vertices[i].y);
+  }
+}
+
+tarasenko::point_t tarasenko::center_of_polygon(point_t * vert, size_t len)
+{
+  double x = 0;
+  double y = 0;
+  for (size_t i = 0; i < (len - 1); ++i)
+  {
+    double triangle_area = ((vert[i].x * vert[i + 1].y - vert[i + 1].x * vert[i].y) / 2);
+    x += ((vert[i].x + vert[i + 1].x) * triangle_area);
+    y += ((vert[i].y + vert[i + 1].y) * triangle_area);
+  }
+  double triangle_area = ((vert[len - 1].x * vert[0].y - vert[0].x * vert[len - 1].y) / 2);
+  x += ((vert[len - 1].x + vert[0].x) * triangle_area);
+  y += ((vert[len - 1].y + vert[0].y) * triangle_area);
+  double area = signed_area_of_polygon(vert, len);
+  x /= (area * 3);
+  y /= (area * 3);
+  return {x, y};
+}
+
+double tarasenko::signed_area_of_polygon(point_t * vert, size_t len)
+{
+  double area = 0;
+  for (size_t i = 0; i < (len - 1); ++i)
+  {
+    area += (vert[i].x * vert[i + 1].y - vert[i + 1].x * vert[i].y);
+  }
+  area += (vert[len - 1].x * vert[0].y - vert[0].x * vert[len - 1].y);
+  area /= 2;
+  return area;
+}
+
+tarasenko::rectangle_t tarasenko::make_rect(point_t left_bot, point_t right_top)
+{
+  point_t center = {(right_top.x + left_bot.x) / 2, (right_top.y + left_bot.y) / 2};
+  return {right_top.x - left_bot.x, right_top.y - left_bot.y, center};
 }
