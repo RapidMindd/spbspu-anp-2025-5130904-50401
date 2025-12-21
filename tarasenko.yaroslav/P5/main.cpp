@@ -97,7 +97,26 @@ int main()
   point_t verts2[7] = {{-2, 2}, {-1, 5}, {2, 8}, {5, 7}, {6, 4}, {4, 1}, {0, 0}};
   figures[5] = new Polygon(verts2, 7);
   printFigures(figures, n);
-  scaleIsotropic(figures, n, {0, 0}, 1.5);
+  point_t point = {0, 0};
+  double coefficient = 0;
+  std::cout << "point: ";
+  if (!(std::cin >> point.x >> point.y))
+  {
+    std::cerr << "two floating point numbers expected\n";
+    return 1;
+  };
+  std::cout << "coefficient: ";
+  if (!(std::cin >> coefficient))
+  {
+    std::cerr << "floating point number expected\n";
+    return 1;
+  }
+  if (coefficient < 0)
+  {
+    std::cerr << "coefficient must be non-negative\n";
+    return 1;
+  }
+  scaleIsotropic(figures, n, point, coefficient);
   printFigures(figures, n);
 }
 
